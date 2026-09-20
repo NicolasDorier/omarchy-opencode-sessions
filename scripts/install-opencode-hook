@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+plugin_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+source_path="$plugin_root/opencode/omarchy-session-status.ts"
+target_dir="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plugins"
+target_path="$target_dir/omarchy-session-status.ts"
+
+mkdir -p "$target_dir"
+rm -rf "$target_path"
+ln -s "$source_path" "$target_path"
+
+printf 'Installed OpenCode hook: %s -> %s\n' "$target_path" "$source_path"
+printf 'Restart running OpenCode sessions to load it.\n'

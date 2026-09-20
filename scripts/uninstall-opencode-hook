@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+plugin_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+source_path="$plugin_root/opencode/omarchy-session-status.ts"
+target_path="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plugins/omarchy-session-status.ts"
+state_dir="${XDG_RUNTIME_DIR:-/tmp}/omarchy-opencode-sessions"
+
+if [[ -L "$target_path" && "$(readlink -f "$target_path")" == "$source_path" ]]; then
+  rm "$target_path"
+  printf 'Removed OpenCode hook: %s\n' "$target_path"
+else
+  printf 'OpenCode hook is not managed by this plugin; leaving it untouched: %s\n' "$target_path"
+fi
+
+rm -rf "$state_dir"

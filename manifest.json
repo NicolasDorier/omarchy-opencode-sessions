@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "nicolasdorier.opencode-sessions",
+  "name": "OpenCode Sessions",
+  "version": "1.0.0",
+  "author": "Nicolas Dorier",
+  "license": "MIT",
+  "description": "Live Idle, Busy, and Attention indicators for OpenCode sessions.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "OpenCode Sessions",
+    "description": "One clickable status indicator for every running top-level OpenCode TUI.",
+    "category": "AI",
+    "aliases": [
+      "opencode",
+      "sessions"
+    ],
+    "allowMultiple": false
+  }
+}

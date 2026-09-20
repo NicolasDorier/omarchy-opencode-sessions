@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+state_dir="${OPENCODE_SESSIONS_STATE_DIR:-${XDG_RUNTIME_DIR:-/tmp}/omarchy-opencode-sessions}"
+proc_root="${OPENCODE_SESSIONS_PROC_ROOT:-/proc}"
+hyprctl_command="${OPENCODE_SESSIONS_HYPRCTL:-hyprctl}"
+
+mkdir -p "$state_dir"
+
+proc_field() {
+  local pid="$1" index="$2" stat rest
+  [[ -r "$proc_root/$pid/stat" ]] || return 1
+  IFS= read -r stat < "$proc_root/$pid/stat"
+  rest="${stat##*) }"
+  read -r -a fields <<< "$rest"
+  [[ ${#fields[@]} -gt "$index" ]] || return 1
+  printf '%s\n' "${fields[$index]}"
+}
+
+declare -A client_address=()
+declare -A client_title=()
+
+while IFS= read -r encoded; do
+  [[ -n "$encoded" ]] || continue
+  client="$(base64 --decode <<< "$encoded")"
+  pid="$(jq -r '.pid // empty' <<< "$client")"
+  [[ "$pid" =~ ^[0-9]+$ ]] || continue
+  client_address[$pid]="$(jq -r '.address // empty' <<< "$client")"
+  client_title[$pid]="$(jq -r '.title // empty' <<< "$client")"
+done < <("$hyprctl_command" clients -j 2>/dev/null | jq -r '.[] | @base64' || true)
+
+output="$(mktemp)"
+trap 'rm -f "$output"' EXIT
+shopt -s nullglob
+
+for state_file in "$state_dir"/*.json; do
+  if ! record="$(jq -c 'select(.version == 1 and (.pid | type == "number") and (.startTime | type == "string"))' "$state_file" 2>/dev/null)" \
+    || [[ -z "$record" ]]; then
+    continue
+  fi
+
+  pid="$(jq -r '.pid' <<< "$record")"
+  expected_start="$(jq -r '.startTime' <<< "$record")"
+  actual_start="$(proc_field "$pid" 19 2>/dev/null || true)"
+  if [[ -z "$actual_start" || "$actual_start" != "$expected_start" ]]; then
+    rm -f "$state_file"
+    continue
+  fi
+
+  current="$pid"
+  address=""
+  terminal_title=""
+  while [[ "$current" =~ ^[0-9]+$ && "$current" -gt 1 ]]; do
+    if [[ -n "${client_address[$current]:-}" ]]; then
+      address="${client_address[$current]}"
+      terminal_title="${client_title[$current]:-}"
+      break
+    fi
+    current="$(proc_field "$current" 1 2>/dev/null || true)"
+  done
+
+  [[ -n "$address" ]] || continue
+  title="$(jq -r '.title // empty' <<< "$record")"
+  if [[ "$terminal_title" == "OC | "* ]]; then
+    title="${terminal_title#OC | }"
+  elif [[ -z "$title" ]]; then
+    title="$terminal_title"
+  fi
+
+  jq -cn \
+    --argjson pid "$pid" \
+    --arg startTime "$expected_start" \
+    --arg project "$(jq -r '.project // "OpenCode"' <<< "$record")" \
+    --arg title "$title" \
+    --arg state "$(jq -r '.state // "idle"' <<< "$record")" \
+    --arg address "$address" \
+    '{pid: $pid, startTime: $startTime, project: $project, title: $title, state: $state, address: $address}' \
+    >> "$output"
+done
+
+jq -s 'sort_by(.startTime | tonumber)' "$output"
