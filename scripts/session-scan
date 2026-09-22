@@ -73,8 +73,9 @@ for state_file in "$state_dir"/*.json; do
     --arg project "$(jq -r '.project // "OpenCode"' <<< "$record")" \
     --arg title "$title" \
     --arg state "$(jq -r '.state // "idle"' <<< "$record")" \
+    --argjson stateChangedAt "$(jq -r '.stateChangedAt // .updatedAt // 0' <<< "$record")" \
     --arg address "$address" \
-    '{pid: $pid, startTime: $startTime, project: $project, title: $title, state: $state, address: $address}' \
+    '{pid: $pid, startTime: $startTime, project: $project, title: $title, state: $state, stateChangedAt: $stateChangedAt, address: $address}' \
     >> "$output"
 done
 

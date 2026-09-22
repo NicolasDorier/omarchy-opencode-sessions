@@ -10,8 +10,16 @@ running top-level OpenCode TUI.
 - **Attention**: urgent filled dot with an outer ring for questions,
   permission requests, and blocking errors
 
-Hover a dot to see its session title. Click it to focus the corresponding
-terminal window in Hyprland. Child and subagent sessions are excluded.
+Hover a dot to see its session title, or click it to focus that session. The
+searchable session menu is available over IPC and sorts by the most recent
+state change. Enter focuses the first filtered session; clicking a row focuses
+that session directly. Child and subagent sessions are excluded.
+
+An optional Hyprland binding opens the menu directly:
+
+```lua
+o.bind("SUPER + A", "OpenCode sessions", "omarchy-shell nicolasdorier.opencode-sessions toggle")
+```
 
 ## Requirements
 

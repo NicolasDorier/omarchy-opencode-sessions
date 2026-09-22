@@ -17,7 +17,7 @@ write_stat 100 opencode 101 200
 write_stat 101 terminal 1 100
 
 cat > "$tmp/state/100.json" <<'JSON'
-{"version":1,"pid":100,"startTime":"200","project":"repo","title":"Stored title","state":"attention"}
+{"version":1,"pid":100,"startTime":"200","project":"repo","title":"Stored title","state":"attention","stateChangedAt":300}
 JSON
 cat > "$tmp/state/999.json" <<'JSON'
 {"version":1,"pid":999,"startTime":"1","project":"stale","title":"Stale","state":"idle"}
@@ -37,7 +37,7 @@ result="$(
 )"
 
 jq -e 'length == 1' <<< "$result" >/dev/null
-jq -e '.[0] == {pid:100,startTime:"200",project:"repo",title:"Live title",state:"attention",address:"0xabc"}' \
+jq -e '.[0] == {pid:100,startTime:"200",project:"repo",title:"Live title",state:"attention",stateChangedAt:300,address:"0xabc"}' \
   <<< "$result" >/dev/null
 [[ ! -e "$tmp/state/999.json" ]]
 

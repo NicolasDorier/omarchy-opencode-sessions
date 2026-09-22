@@ -69,6 +69,7 @@ const OpenCodeSessionStatus = (async ({ directory }) => {
     sessionID: "",
     title: "",
     state: "idle" as IndicatorState,
+    stateChangedAt: Date.now(),
     updatedAt: Date.now(),
   }
   let writes = Promise.resolve()
@@ -112,7 +113,7 @@ const OpenCodeSessionStatus = (async ({ directory }) => {
 
       record.sessionID = sessionID
       record.title = String(info.title || record.title || "")
-      record.state = reduceIndicatorState(record.state, {
+      const nextState = reduceIndicatorState(record.state, {
         type: String(event.type || ""),
         status: String(event?.properties?.status?.type || ""),
         errorName: String(event?.properties?.error?.name || ""),
@@ -120,6 +121,8 @@ const OpenCodeSessionStatus = (async ({ directory }) => {
         finish: String(event?.properties?.info?.finish || ""),
         completed: Number(event?.properties?.info?.time?.completed || 0) > 0,
       })
+      if (nextState !== record.state) record.stateChangedAt = Date.now()
+      record.state = nextState
       await writeRecord()
     },
     dispose: async () => {

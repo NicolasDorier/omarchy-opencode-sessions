@@ -43,6 +43,7 @@ Example:
   "sessionID": "ses_example",
   "title": "Review pull request",
   "state": "busy",
+  "stateChangedAt": 1789899498000,
   "updatedAt": 1789899498379
 }
 ```
@@ -126,10 +127,35 @@ parent chain through `/proc`, and selects the first ancestor represented by a
 Hyprland client. This supports Foot and other terminals without matching a
 terminal class.
 
-Dots are sorted by process start time, producing stable oldest-to-newest order.
+The popup sorts sessions by `stateChangedAt` descending, so the session whose
+status changed most recently appears first. `updatedAt` remains a record-write
+timestamp and does not affect ordering.
+
 The terminal title replaces the stored session title when it begins with
 `OC | `, ensuring that switching sessions within a TUI updates the title-only
 tooltip even without a server event for the route change.
+
+## Session Menu
+
+The `nicolasdorier.opencode-sessions` IPC target opens a centered, full-screen
+menu surface matching the native `omarchy menu select` interface: menu-theme
+card, dimmed scrim, inline type-to-filter header, and highlighted rows. A
+Hyprland shortcut can call it with:
+
+```bash
+omarchy-shell nicolasdorier.opencode-sessions toggle
+```
+
+Clicking a bar dot continues to focus that session directly. The popup lists
+session titles with the same state indicators used by the bar.
+
+The menu surface owns keyboard focus. Typing filters titles case-insensitively,
+the arrow keys move the highlighted row, Escape clears the filter or closes
+the menu, and Enter activates the first filtered session unless keyboard or
+pointer navigation selected another row. Clicking a row activates that
+specific session. Before focusing the selected window, activation focuses the
+popup's `omarchy-opencode-sessions-menu` layer namespace. This keeps focus
+handoff deterministic while the popup closes.
 
 ## Window Focus
 
@@ -156,12 +182,11 @@ Different changes require different reloads:
 | Changed component | Required action |
 |---|---|
 | QML, manifest, or bar configuration | `omarchy restart shell` |
-| OpenCode hook | Restart each TUI, or send it `SIGUSR2` |
+| OpenCode hook | Restart each TUI |
 | Hook symlink installation | Restart each running TUI once |
 
-`SIGUSR2` is OpenCode's supported configuration reload path. The TUI forwards
-it to its worker, which reloads plugins without requiring the terminal window
-to be recreated.
+Although `SIGUSR2` reloads OpenCode configuration, imported plugin modules can
+remain cached. Restart the TUI to guarantee that hook code changes take effect.
 
 ## Troubleshooting
 
@@ -196,8 +221,8 @@ opencode db --format json 'SELECT session_id, data FROM message ORDER BY time_cr
 ```
 
 If the final assistant message has `time.completed` and `finish: "stop"` but
-the record remains Busy, verify that the TUI loaded the current hook and reload
-it with `SIGUSR2` or restart it.
+the record remains Busy, verify that the TUI loaded the current hook and restart
+it. Records written by the current hook include `stateChangedAt`.
 
 ### Clicking does not focus the session
 
