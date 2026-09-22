@@ -149,13 +149,13 @@ omarchy-shell nicolasdorier.opencode-sessions toggle
 Clicking a bar dot continues to focus that session directly. The popup lists
 session titles with the same state indicators used by the bar.
 
-The menu surface owns keyboard focus. Typing filters titles case-insensitively,
-the arrow keys move the highlighted row, Escape clears the filter or closes
-the menu, and Enter activates the first filtered session unless keyboard or
-pointer navigation selected another row. Clicking a row activates that
-specific session. Before focusing the selected window, activation focuses the
-popup's `omarchy-opencode-sessions-menu` layer namespace. This keeps focus
-handoff deterministic while the popup closes.
+The menu surface owns keyboard focus. The first filtered session is highlighted
+initially. Typing filters titles case-insensitively, the arrow keys move the
+highlighted row, Escape clears the filter or closes the menu, and Enter
+activates the highlighted session. Clicking a row activates that specific
+session without changing the keyboard selection. Before focusing the selected
+window, activation focuses the popup's `omarchy-opencode-sessions-menu` layer
+namespace. This keeps focus handoff deterministic while the popup closes.
 
 ## Window Focus
 

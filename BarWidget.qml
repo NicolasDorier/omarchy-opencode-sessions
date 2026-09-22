@@ -12,7 +12,6 @@ Panel {
     property var filteredSessions: []
     property string filterText: ""
     property int selectedIndex: 0
-    property bool cursorActive: false
     readonly property bool vertical: bar ? bar.vertical : false
     readonly property int barSize: bar ? bar.barSize : Style.bar.sizeHorizontal
     readonly property color foreground: bar ? bar.barForeground : Color.foreground
@@ -78,7 +77,6 @@ Panel {
         filteredSessions = result;
         if (resetSelection || result.length === 0) {
             selectedIndex = result.length > 0 ? 0 : -1;
-            cursorActive = false;
             return ;
         }
         var preservedIndex = -1;
@@ -100,7 +98,6 @@ Panel {
         if (filteredSessions.length === 0)
             return ;
 
-        cursorActive = true;
         selectedIndex = ((selectedIndex + delta) % filteredSessions.length + filteredSessions.length) % filteredSessions.length;
         Qt.callLater(function() {
             sessionList.positionViewAtIndex(selectedIndex, ListView.Contain);
@@ -130,7 +127,7 @@ Panel {
     }
 
     function activateDefault() {
-        activateIndex(cursorActive ? selectedIndex : 0);
+        activateIndex(selectedIndex);
     }
 
     moduleName: "nicolasdorier.opencode-sessions"
@@ -244,7 +241,7 @@ Panel {
         BorderSurface {
             id: card
 
-            width: Math.min(Style.space(300), menuPanel.width - Style.gapsOut * 2)
+            width: Math.min(Style.space(360), menuPanel.width - Style.gapsOut * 2)
             height: Math.min(root.contentMargin * 2 + root.headerHeight + root.contentSpacing + root.rowsHeight, menuPanel.height - Style.gapsOut * 2)
             anchors.centerIn: parent
             radius: Style.cornerRadius
@@ -334,7 +331,7 @@ Panel {
 
                                 required property var modelData
                                 required property int index
-                                readonly property bool hasCursor: root.cursorActive && index === root.selectedIndex
+                                readonly property bool hasCursor: index === root.selectedIndex
 
                                 width: sessionList.width
                                 height: root.rowHeight
@@ -370,12 +367,7 @@ Panel {
 
                                 MouseArea {
                                     anchors.fill: parent
-                                    hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
-                                    onEntered: {
-                                        root.cursorActive = true;
-                                        root.selectedIndex = sessionRow.index;
-                                    }
                                     onClicked: root.activateIndex(sessionRow.index)
                                 }
 
