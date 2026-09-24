@@ -166,14 +166,22 @@ The legacy command below fails with a Lua parse error:
 hyprctl dispatch focuswindow address:0x123
 ```
 
-The widget instead executes the equivalent Lua dispatcher expression:
+The widget resolves the exact client and uses an optional global focus hook:
 
 ```lua
-hl.dsp.focus({ window = "address:0x123" })
+local window = hl.get_window("address:0x123")
+local focus = rawget(_G, "omarchy_focus_window")
+if focus and window then
+    focus(window)
+else
+    hl.dispatch(hl.dsp.focus({ window = "address:0x123" }))
+end
 ```
 
-This focuses the exact client and switches to its normal or special workspace.
-The address is shell-quoted with Omarchy's `Util.shellQuote`.
+The hook lets local Hyprland configuration restore a hidden window before it is
+focused. Without one, the widget focuses the client directly and switches to
+its normal or special workspace. The action is shell-quoted with Omarchy's
+`Util.shellQuote`.
 
 ## Reload Behavior
 

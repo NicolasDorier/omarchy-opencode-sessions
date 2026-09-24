@@ -113,10 +113,16 @@ Panel {
             return ;
 
         close();
-        var windowFocus = "hl.dsp.focus({ window = \"address:" + String(address) + "\" })";
-        var action = focusMenuNamespace
-            ? "function() hl.dispatch(hl.dsp.exec_raw(\"focuslayer\", \"omarchy-opencode-sessions-menu\")); hl.dispatch(" + windowFocus + ") end"
-            : windowFocus;
+        var selector = "address:" + String(address);
+        var focusMenu = focusMenuNamespace
+            ? "hl.dispatch(hl.dsp.exec_raw(\"focuslayer\", \"omarchy-opencode-sessions-menu\")); "
+            : "";
+        var action = "function() " + focusMenu
+            + "local selector = \"" + selector + "\"; "
+            + "local window = hl.get_window(selector); "
+            + "local focus = rawget(_G, \"omarchy_focus_window\"); "
+            + "if focus and window then focus(window) else hl.dispatch(hl.dsp.focus({ window = selector })) end "
+            + "end";
         bar.run("hyprctl dispatch " + Util.shellQuote(action));
     }
 

@@ -21,6 +21,10 @@ An optional Hyprland binding opens the menu directly:
 o.bind("SUPER + A", "OpenCode sessions", "omarchy-shell nicolasdorier.opencode-sessions toggle")
 ```
 
+Session activation uses `_G.omarchy_focus_window(window)` when that optional
+Hyprland Lua hook exists, falling back to direct window focus otherwise. The
+hook can restore application-specific hidden windows before focusing them.
+
 ## Requirements
 
 - Omarchy with the Quickshell bar plugin system
