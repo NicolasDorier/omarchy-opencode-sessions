@@ -1,16 +1,16 @@
 # Omarchy OpenCode Sessions
 
-A compact, theme-aware Omarchy bar widget showing one status dot for every
+A compact, theme-aware Omarchy bar widget showing one status icon for every
 running top-level OpenCode TUI.
 
 ## States
 
-- **Idle**: outlined, dim dot
-- **Busy**: filled accent dot, including automatic retries
-- **Attention**: urgent filled dot with an outer ring for questions,
-  permission requests, and blocking errors
+- **Idle**: dim outlined circle
+- **Busy**: rotating accent spinner, including automatic retries
+- **Attention**: urgent exclamation circle for questions, permission requests,
+  and blocking errors
 
-Hover a dot to see its session title, or click it to focus that session. The
+Hover an icon to see its session title, or click it to focus that session. The
 searchable session menu is available over IPC and sorts by the most recent
 state change. Enter focuses the first filtered session; clicking a row focuses
 that session directly. Child and subagent sessions are excluded.

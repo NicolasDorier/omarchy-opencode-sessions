@@ -75,9 +75,9 @@ The bar exposes three states:
 
 | State | Appearance | Meaning |
 |---|---|---|
-| Idle | Outlined dim dot | The TUI is waiting for another prompt |
-| Busy | Filled accent dot | OpenCode is generating, executing tools, or waiting to retry automatically |
-| Attention | Urgent filled dot with an outer ring | OpenCode cannot continue without user attention |
+| Idle | Dim outlined circle | The TUI is waiting for another prompt |
+| Busy | Rotating accent spinner | OpenCode is generating, executing tools, or waiting to retry automatically |
+| Attention | Urgent exclamation circle | OpenCode cannot continue without user attention |
 
 Transitions:
 
@@ -146,7 +146,7 @@ Hyprland shortcut can call it with:
 omarchy-shell nicolasdorier.opencode-sessions toggle
 ```
 
-Clicking a bar dot continues to focus that session directly. The popup lists
+Clicking a bar icon continues to focus that session directly. The popup lists
 session titles with the same state indicators used by the bar.
 
 The menu surface owns keyboard focus. The first filtered session is highlighted

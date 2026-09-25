@@ -25,6 +25,7 @@ Panel {
     readonly property color selectedBackground: Color.menu.selectedBackground
     readonly property color selectedText: Color.menu.selectedText
     readonly property color selectedBorder: Color.menu.selectedBorder
+    readonly property string iconFontFamily: "JetBrainsMono Nerd Font"
     readonly property var menuBorderSpec: Border.surfaceSpec("menu", "border", menuBorder, Math.max(1, Style.space(2)))
     readonly property var selectedBorderSpec: Border.surfaceSpec("menu", "selected-border", selectedBorder, 0)
     readonly property int contentMargin: Style.spacing.panelPadding
@@ -204,8 +205,8 @@ Panel {
                 tooltipText: root.tooltip(modelData)
                 onPressed: root.focusSession(modelData.address)
 
-                StateDot {
-                    width: Style.space(10)
+                StateIcon {
+                    width: Style.space(14)
                     height: width
                     anchors.centerIn: parent
                     state: sessionButton.modelData.state
@@ -345,10 +346,10 @@ Panel {
                                 color: hasCursor ? root.selectedBackground : "transparent"
                                 borderSpec: hasCursor ? root.selectedBorderSpec : Border.none()
 
-                                StateDot {
+                                StateIcon {
                                     id: rowState
 
-                                    width: Style.space(10)
+                                    width: Style.space(14)
                                     height: width
                                     anchors.left: parent.left
                                     anchors.leftMargin: Style.space(18)
@@ -402,26 +403,27 @@ Panel {
 
     }
 
-    component StateDot: Item {
-        property string state: "idle"
+    component StateIcon: Item {
+        id: stateIcon
 
-        Rectangle {
-            anchors.fill: parent
-            visible: parent.state === "attention"
-            radius: width / 2
-            color: "transparent"
-            border.width: Math.max(1, Style.space(1))
-            border.color: root.attentionColor
+        property string state: "idle"
+        property real busyAngle: 0
+
+        NumberAnimation on busyAngle {
+            from: 0
+            to: 360
+            duration: 1200
+            loops: Animation.Infinite
+            running: stateIcon.state === "busy"
         }
 
-        Rectangle {
-            width: Style.space(6)
-            height: width
+        Text {
             anchors.centerIn: parent
-            radius: width / 2
-            color: parent.state === "idle" ? "transparent" : (parent.state === "attention" ? root.attentionColor : root.busyColor)
-            border.width: parent.state === "idle" ? Math.max(1, Style.space(1)) : 0
-            border.color: root.idleColor
+            text: parent.state === "idle" ? "\uf10c" : (parent.state === "attention" ? "\uf06a" : "\uf110")
+            color: parent.state === "idle" ? root.idleColor : (parent.state === "attention" ? root.attentionColor : root.busyColor)
+            font.family: root.iconFontFamily
+            font.pixelSize: parent.width
+            rotation: parent.state === "busy" ? parent.busyAngle : 0
         }
 
     }
