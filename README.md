@@ -28,7 +28,7 @@ hook can restore application-specific hidden windows before focusing them.
 ## Requirements
 
 - Omarchy with the Quickshell bar plugin system
-- OpenCode 1.18 or newer
+- OpenCode 2.0 or newer
 - Hyprland, `jq`, and standard Linux `/proc`
 
 ## Install
@@ -39,8 +39,8 @@ omarchy plugin add https://github.com/nicolasdorier/omarchy-opencode-sessions.gi
 omarchy bar move nicolasdorier.opencode-sessions --before omarchy.agents
 ```
 
-Restart every running OpenCode TUI once after installing the hook. New sessions
-load it automatically. The hook writes transient, per-process JSON records to
+Restart every running OpenCode TUI once after installing the CLI plugin. New
+sessions load it automatically. The plugin writes transient, per-process JSON records to
 `$XDG_RUNTIME_DIR/omarchy-opencode-sessions/`; no session content is persisted.
 
 ## Uninstall

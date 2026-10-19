@@ -1,4 +1,4 @@
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Context, Definition } from "@opencode/plugin/tui"
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises"
 import { basename, join } from "node:path"
 
@@ -7,37 +7,21 @@ export type IndicatorState = "idle" | "busy" | "attention"
 type StateEvent = {
   type: string
   status?: string
-  errorName?: string
-  role?: string
-  finish?: string
-  completed?: boolean
 }
 
 export function reduceIndicatorState(current: IndicatorState, event: StateEvent): IndicatorState {
-  if (event.type === "question.asked" || event.type === "permission.asked") return "attention"
-  if (event.type === "question.replied" || event.type === "question.rejected" || event.type === "permission.replied")
+  if (event.type === "permission.asked" || event.type === "form.created") return "attention"
+  if (event.type === "permission.replied" || event.type === "form.replied" || event.type === "form.cancelled")
     return "busy"
-  if (event.type === "session.error") return event.errorName === "MessageAbortedError" ? "idle" : "attention"
-  if (event.type === "message.updated" && event.role === "assistant" && event.completed) {
-    if (event.finish && !["tool-calls", "unknown", "error"].includes(event.finish)) return "idle"
-  }
+  if (event.type === "session.execution.failed") return "attention"
+  if (event.type === "session.execution.started" || event.type === "session.retry.scheduled") return "busy"
+  if (event.type === "session.execution.succeeded" || event.type === "session.execution.interrupted") return "idle"
   if (event.type === "session.status") {
-    if (event.status === "busy" || event.status === "retry") return "busy"
+    if (event.status === "running" || event.status === "busy" || event.status === "retry") return "busy"
     if (event.status === "idle") return current === "attention" ? "attention" : "idle"
   }
   if (event.type === "session.idle") return current === "attention" ? "attention" : "idle"
   return current
-}
-
-const NON_TUI_COMMANDS = new Set([
-  "completion", "acp", "mcp", "attach", "run", "debug", "providers", "agent",
-  "upgrade", "uninstall", "serve", "web", "models", "stats", "export", "import",
-  "github", "session", "plugin", "db",
-])
-
-export function isInteractiveTui(argv: string[]): boolean {
-  const args = argv.slice(1)
-  return !args.some((arg) => NON_TUI_COMMANDS.has(arg))
 }
 
 function procStartTime(content: string): string {
@@ -47,25 +31,27 @@ function procStartTime(content: string): string {
 }
 
 function eventSessionID(event: any): string {
-  return String(event?.properties?.sessionID || event?.properties?.info?.sessionID || event?.properties?.info?.id || "")
+  return String(event?.data?.sessionID || event?.data?.form?.sessionID || "")
 }
 
-const OpenCodeSessionStatus = (async ({ directory }) => {
-  const commandLine = (await readFile("/proc/self/cmdline", "utf8")).split("\0").filter(Boolean)
-  if (!isInteractiveTui(commandLine)) return {}
+function eventStatus(event: any): string {
+  return String(event?.data?.status?.type || event?.data?.status || "")
+}
 
+export async function setupSessionStatus(ctx: Context) {
   const runtimeDir = process.env.XDG_RUNTIME_DIR || "/tmp"
   const stateDir = join(runtimeDir, "omarchy-opencode-sessions")
   const statePath = join(stateDir, `${process.pid}.json`)
   const startTime = procStartTime(await readFile("/proc/self/stat", "utf8"))
-  const topLevelSessions = new Map<string, any>()
+  const initialDirectory = ctx.location?.directory || ctx.data.location.default().directory
+  const states = new Map<string, IndicatorState>()
 
   let record = {
     version: 1,
     pid: process.pid,
     startTime,
-    directory,
-    project: basename(directory) || directory,
+    directory: initialDirectory,
+    project: basename(initialDirectory) || initialDirectory,
     sessionID: "",
     title: "",
     state: "idle" as IndicatorState,
@@ -73,8 +59,12 @@ const OpenCodeSessionStatus = (async ({ directory }) => {
     updatedAt: Date.now(),
   }
   let writes = Promise.resolve()
+  let lastSnapshot = ""
 
-  async function writeRecord() {
+  async function writeRecord(force = false) {
+    const comparable = JSON.stringify({ ...record, updatedAt: 0 })
+    if (!force && comparable === lastSnapshot) return
+    lastSnapshot = comparable
     record.updatedAt = Date.now()
     const snapshot = JSON.stringify(record) + "\n"
     writes = writes.then(async () => {
@@ -86,50 +76,59 @@ const OpenCodeSessionStatus = (async ({ directory }) => {
     await writes
   }
 
-  function sessionInfo(sessionID: string, supplied?: any): any | null {
-    if (supplied) {
-      if (supplied.parentID) {
-        topLevelSessions.set(sessionID, null)
-        return null
-      }
-      topLevelSessions.set(sessionID, supplied)
-      return supplied
+  async function refreshCurrent() {
+    const route = ctx.ui.router.current()
+    const sessionID = route.type === "session" ? route.sessionID : ""
+    const info = sessionID ? ctx.data.session.get(sessionID) : undefined
+    const tab = sessionID && ctx.ui.tabs.enabled()
+      ? ctx.ui.tabs.list().find((candidate) => candidate.sessionID === sessionID)
+      : undefined
+
+    let state = sessionID ? states.get(sessionID) || "idle" : "idle"
+    if (tab?.attention) state = "attention"
+    else if (tab?.busy || (sessionID && ctx.data.session.status(sessionID) === "running")) state = "busy"
+    else if (state !== "attention") state = "idle"
+    if (sessionID) states.set(sessionID, state)
+
+    const directory = info?.location?.directory || initialDirectory
+    const changedState = record.sessionID !== sessionID || record.state !== state
+    record = {
+      ...record,
+      directory,
+      project: basename(directory) || directory,
+      sessionID,
+      title: String(info?.title || tab?.title || ""),
+      state,
+      stateChangedAt: changedState ? Date.now() : record.stateChangedAt,
     }
-    return topLevelSessions.get(sessionID) || null
+    await writeRecord()
   }
 
-  await writeRecord()
+  await writeRecord(true)
+  const stopListening = ctx.data.listen(({ details: event }) => {
+    const sessionID = eventSessionID(event)
+    if (sessionID) {
+      states.set(sessionID, reduceIndicatorState(states.get(sessionID) || "idle", {
+        type: event.type,
+        status: eventStatus(event),
+      }))
+    }
+    void refreshCurrent()
+  })
+  const timer = setInterval(() => void refreshCurrent(), 250)
+  void refreshCurrent()
 
-  return {
-    event: async ({ event }: any) => {
-      const sessionID = eventSessionID(event)
-      if (!sessionID) return
-
-      const supplied = event.type === "session.created" || event.type === "session.updated"
-        ? event?.properties?.info
-        : undefined
-      const info = sessionInfo(sessionID, supplied)
-      if (!info || (info.directory && info.directory !== directory)) return
-
-      record.sessionID = sessionID
-      record.title = String(info.title || record.title || "")
-      const nextState = reduceIndicatorState(record.state, {
-        type: String(event.type || ""),
-        status: String(event?.properties?.status?.type || ""),
-        errorName: String(event?.properties?.error?.name || ""),
-        role: String(event?.properties?.info?.role || ""),
-        finish: String(event?.properties?.info?.finish || ""),
-        completed: Number(event?.properties?.info?.time?.completed || 0) > 0,
-      })
-      if (nextState !== record.state) record.stateChangedAt = Date.now()
-      record.state = nextState
-      await writeRecord()
-    },
-    dispose: async () => {
-      await writes
-      await rm(statePath, { force: true })
-    },
+  return async () => {
+    stopListening()
+    clearInterval(timer)
+    await writes
+    await rm(statePath, { force: true })
   }
-}) satisfies Plugin
+}
+
+const OpenCodeSessionStatus = {
+  id: "omarchy-session-status",
+  setup: setupSessionStatus,
+} satisfies Definition
 
 export default OpenCodeSessionStatus

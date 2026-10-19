@@ -1,27 +1,28 @@
 # Architecture and Troubleshooting
 
-OpenCode Sessions joins two plugin systems. A global OpenCode hook observes
-session events and writes transient state. An Omarchy bar widget discovers
-those records, maps each process to its Hyprland window, and renders the dots.
+OpenCode Sessions joins two plugin systems. An OpenCode CLI plugin observes
+the active TUI route and session events and writes transient state. An Omarchy
+bar widget discovers those records, maps each process to its Hyprland window,
+and renders the dots.
 
 ## Components
 
 | Component | Path | Responsibility |
 |---|---|---|
-| OpenCode hook | `opencode/omarchy-session-status.ts` | Convert OpenCode events into one state record per TUI process |
+| OpenCode CLI plugin | `opencode/omarchy-session-status.ts` | Convert OpenCode events into one state record per TUI process |
 | Session scanner | `scripts/session-scan` | Remove stale records and map OpenCode process ancestry to Hyprland clients |
 | Bar widget | `BarWidget.qml` | Poll the scanner, render dots and tooltips, and focus clicked sessions |
-| Hook installer | `scripts/install-opencode-hook` | Link the bundled hook into the global OpenCode plugin directory |
-| Hook uninstaller | `scripts/uninstall-opencode-hook` | Remove the managed hook link and transient records |
+| Plugin installer | `scripts/install-opencode-hook` | Link and enable the bundled plugin in OpenCode CLI settings |
+| Plugin uninstaller | `scripts/uninstall-opencode-hook` | Disable the managed plugin and remove transient records |
 
-The hook is installed at:
+The CLI plugin is installed at:
 
 ```text
-~/.config/opencode/plugins/omarchy-session-status.ts
+~/.config/opencode/cli-plugins/omarchy-session-status/
 ```
 
-OpenCode automatically loads JavaScript and TypeScript files from that
-directory. It reads plugins only at startup or configuration reload.
+The installer adds that path to the `plugins` array in
+`~/.config/opencode/cli.json`. OpenCode reads CLI plugins at TUI startup.
 
 ## Runtime Records
 
@@ -59,15 +60,12 @@ start-time-mismatch records are deleted automatically.
 
 ## TUI Filtering
 
-The global hook also loads for commands such as `opencode run`, `opencode db`,
-and `opencode debug`. Those commands must not become bar sessions. The hook
-reads `/proc/self/cmdline` and creates a record only for the default interactive
-TUI invocation.
+The plugin is registered as a CLI plugin, so server commands such as
+`opencode run`, `opencode db`, and `opencode debug` do not create bar sessions.
 
 Child and delegated-agent sessions run inside the same OpenCode process. The
-hook records `session.created` and `session.updated` metadata and ignores any
-session with `parentID`. Therefore, subagents do not receive separate dots or
-overwrite their parent TUI's state.
+plugin follows only the session route currently selected by that TUI. Therefore,
+subagents do not receive separate dots or overwrite their parent TUI's state.
 
 ## State Model
 
@@ -83,41 +81,24 @@ Transitions:
 
 | Event | Result |
 |---|---|
-| `session.status: busy` | Busy |
+| `session.status: running` | Busy |
 | `session.status: retry` | Busy |
 | `session.status: idle` | Idle, unless Attention is sticky |
 | `session.idle` | Idle, unless Attention is sticky |
-| `question.asked` | Attention |
+| `form.created` | Attention |
 | `permission.asked` | Attention |
-| Question or permission reply | Busy |
-| Blocking `session.error` | Attention |
-| `MessageAbortedError` | Idle |
-| Completed assistant message with final finish reason | Idle |
-| Completed assistant message with `tool-calls` | No change |
+| Form or permission reply | Busy |
+| `session.execution.failed` | Attention |
+| `session.execution.interrupted` | Idle |
+| `session.execution.succeeded` | Idle |
 
 Attention caused by an error remains sticky across idle events. It clears when
 the session becomes Busy again. This prevents a trailing idle event from hiding
 an error that still needs inspection.
 
-### Idle Fallback
-
-OpenCode 1.18 does not consistently deliver `session.idle` to global plugins.
-The reliable fallback is `message.updated` for an assistant message whose
-`time.completed` exists and whose finish reason is final. Intermediate
-assistant messages finish with `tool-calls`; treating those as Idle would make
-the dot flicker while tools are still running, so they are ignored. `unknown`
-and `error` finish reasons are also not treated as successful completion.
-
-## Avoiding Startup Deadlocks
-
-Plugin initialization must not call `client.session.list()` or another API on
-the same OpenCode server. The plugin is initialized while that server is still
-bootstrapping; awaiting a request back into it can deadlock startup and prevent
-OpenCode from opening.
-
-The hook therefore writes an initial Idle record without querying the API. It
-learns session IDs and titles from subsequent events. Until then, the scanner
-uses the terminal title as a display fallback.
+The CLI plugin also checks OpenCode's client-side session and tab status. This
+keeps the record synchronized when switching routes and covers status changes
+that occur between individual events.
 
 ## Window Discovery
 
@@ -190,11 +171,10 @@ Different changes require different reloads:
 | Changed component | Required action |
 |---|---|
 | QML, manifest, or bar configuration | `omarchy restart shell` |
-| OpenCode hook | Restart each TUI |
-| Hook symlink installation | Restart each running TUI once |
+| OpenCode CLI plugin | Restart each TUI |
+| Plugin symlink or settings installation | Restart each running TUI once |
 
-Although `SIGUSR2` reloads OpenCode configuration, imported plugin modules can
-remain cached. Restart the TUI to guarantee that hook code changes take effect.
+Restart the TUI to guarantee that CLI plugin code changes take effect.
 
 ## Troubleshooting
 
@@ -203,21 +183,10 @@ remain cached. Restart the TUI to guarantee that hook code changes take effect.
 Remove the hook link to isolate the integration:
 
 ```bash
-rm ~/.config/opencode/plugins/omarchy-session-status.ts
+~/.config/omarchy/plugins/nicolasdorier.opencode-sessions/scripts/uninstall-opencode-hook
 ```
 
-Then test the hook without installing it globally:
-
-```bash
-OPENCODE_CONFIG_CONTENT='{
-  "plugin": [
-    "file:///absolute/path/to/opencode/omarchy-session-status.ts"
-  ]
-}' timeout 15 opencode debug config
-```
-
-The command must print the resolved configuration and exit. A hang during
-plugin loading usually indicates a startup-time API self-call.
+Then restart OpenCode. Run the installer again to restore the plugin.
 
 ### Dot remains Busy after completion
 

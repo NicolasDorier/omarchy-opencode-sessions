@@ -2,32 +2,21 @@ import assert from "node:assert/strict"
 import { mkdtemp, readFile, stat } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import OpenCodeSessionStatus, { isInteractiveTui, reduceIndicatorState } from "../opencode/omarchy-session-status.ts"
+import OpenCodeSessionStatus, { reduceIndicatorState, setupSessionStatus } from "../opencode/omarchy-session-status.ts"
 
-assert.equal(reduceIndicatorState("idle", { type: "session.status", status: "busy" }), "busy")
+assert.equal(OpenCodeSessionStatus.id, "omarchy-session-status")
+assert.equal(reduceIndicatorState("idle", { type: "session.status", status: "running" }), "busy")
 assert.equal(reduceIndicatorState("idle", { type: "session.status", status: "retry" }), "busy")
 assert.equal(reduceIndicatorState("busy", { type: "session.idle" }), "idle")
-assert.equal(reduceIndicatorState("busy", { type: "question.asked" }), "attention")
+assert.equal(reduceIndicatorState("busy", { type: "form.created" }), "attention")
 assert.equal(reduceIndicatorState("busy", { type: "permission.asked" }), "attention")
 assert.equal(reduceIndicatorState("attention", { type: "session.idle" }), "attention")
 assert.equal(reduceIndicatorState("attention", { type: "session.status", status: "idle" }), "attention")
-assert.equal(reduceIndicatorState("attention", { type: "question.replied" }), "busy")
+assert.equal(reduceIndicatorState("attention", { type: "form.replied" }), "busy")
 assert.equal(reduceIndicatorState("attention", { type: "permission.replied" }), "busy")
-assert.equal(reduceIndicatorState("busy", { type: "session.error", errorName: "APIError" }), "attention")
-assert.equal(reduceIndicatorState("busy", { type: "session.error", errorName: "MessageAbortedError" }), "idle")
+assert.equal(reduceIndicatorState("busy", { type: "session.execution.failed" }), "attention")
+assert.equal(reduceIndicatorState("busy", { type: "session.execution.interrupted" }), "idle")
 assert.equal(reduceIndicatorState("attention", { type: "session.status", status: "busy" }), "busy")
-assert.equal(reduceIndicatorState("busy", {
-  type: "message.updated", role: "assistant", finish: "tool-calls", completed: true,
-}), "busy")
-assert.equal(reduceIndicatorState("busy", {
-  type: "message.updated", role: "assistant", finish: "stop", completed: true,
-}), "idle")
-assert.equal(reduceIndicatorState("busy", {
-  type: "message.updated", role: "assistant", finish: "error", completed: true,
-}), "busy")
-assert.equal(isInteractiveTui(["/usr/bin/opencode", "--auto", "."]), true)
-assert.equal(isInteractiveTui(["/usr/bin/opencode", "run", "hello"]), false)
-assert.equal(isInteractiveTui(["/usr/bin/opencode", "debug", "wait"]), false)
 
 const runtimeDir = await mkdtemp(join(tmpdir(), "opencode-session-hook-"))
 process.env.XDG_RUNTIME_DIR = runtimeDir
@@ -36,51 +25,51 @@ const session = {
   directory: "/tmp/project",
   title: "Test session",
   time: { updated: 1 },
+  location: { directory: "/tmp/project" },
 }
-const hooks = await OpenCodeSessionStatus({
-  directory: session.directory,
-})
+let listener
+let route = { type: "home" }
+let status = "idle"
+const context = {
+  location: { directory: session.directory },
+  data: {
+    location: { default: () => ({ directory: session.directory }) },
+    listen: (callback) => {
+      listener = callback
+      return () => { listener = undefined }
+    },
+    session: {
+      get: (id) => id === session.id ? session : undefined,
+      status: () => status,
+    },
+  },
+  ui: {
+    router: { current: () => route },
+    tabs: { enabled: () => false, list: () => [] },
+  },
+}
+const cleanup = await setupSessionStatus(context)
 const statePath = join(runtimeDir, "omarchy-opencode-sessions", `${process.pid}.json`)
 let persisted = JSON.parse(await readFile(statePath, "utf8"))
 assert.equal(persisted.state, "idle")
 assert.equal(persisted.title, "")
+assert.equal(persisted.version, 1)
 
-await hooks.event({
-  event: {
-    type: "session.updated",
-    properties: { info: session },
-  },
-})
+route = { type: "session", sessionID: session.id }
+status = "running"
+listener({ details: { type: "session.execution.started", data: { sessionID: session.id } } })
+await new Promise((resolve) => setTimeout(resolve, 20))
 persisted = JSON.parse(await readFile(statePath, "utf8"))
 assert.equal(persisted.title, session.title)
-
-await hooks.event({
-  event: {
-    type: "session.status",
-    properties: { sessionID: session.id, status: { type: "busy" } },
-  },
-})
-persisted = JSON.parse(await readFile(statePath, "utf8"))
 assert.equal(persisted.state, "busy")
 
-await hooks.event({
-  event: {
-    type: "message.updated",
-    properties: {
-      info: {
-        id: "msg_test",
-        sessionID: session.id,
-        role: "assistant",
-        finish: "stop",
-        time: { completed: Date.now() },
-      },
-    },
-  },
-})
+status = "idle"
+listener({ details: { type: "session.execution.succeeded", data: { sessionID: session.id } } })
+await new Promise((resolve) => setTimeout(resolve, 20))
 persisted = JSON.parse(await readFile(statePath, "utf8"))
 assert.equal(persisted.state, "idle")
 
-await hooks.dispose()
+await cleanup()
 await assert.rejects(stat(statePath), { code: "ENOENT" })
 
 console.log("state-hook tests passed")

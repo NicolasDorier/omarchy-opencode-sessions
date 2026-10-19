@@ -3,12 +3,36 @@ set -euo pipefail
 
 plugin_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 source_path="$plugin_root/opencode/omarchy-session-status.ts"
-target_dir="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plugins"
-target_path="$target_dir/omarchy-session-status.ts"
+config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/opencode"
+target_dir="$config_dir/cli-plugins"
+target_path="$target_dir/omarchy-session-status"
+previous_target="$target_dir/omarchy-session-status.ts"
+cli_config="$config_dir/cli.json"
+legacy_path="$config_dir/plugins/omarchy-session-status.ts"
 
 mkdir -p "$target_dir"
 rm -rf "$target_path"
-ln -s "$source_path" "$target_path"
+rm -f "$previous_target"
+ln -s "$plugin_root/opencode" "$target_path"
 
-printf 'Installed OpenCode hook: %s -> %s\n' "$target_path" "$source_path"
-printf 'Restart running OpenCode sessions to load it.\n'
+if [[ -L "$legacy_path" && "$(readlink -f "$legacy_path")" == "$source_path" ]]; then
+  rm "$legacy_path"
+fi
+
+CLI_CONFIG="$cli_config" PLUGIN_PATH="$target_path" PREVIOUS_PATH="$previous_target" node <<'NODE'
+const fs = require("node:fs")
+const path = process.env.CLI_CONFIG
+const plugin = process.env.PLUGIN_PATH
+const previous = process.env.PREVIOUS_PATH
+const config = fs.existsSync(path) ? JSON.parse(fs.readFileSync(path, "utf8")) : {
+  $schema: "https://opencode.ai/v2/cli.json",
+}
+config.plugins = Array.isArray(config.plugins) ? config.plugins : []
+config.plugins = config.plugins.filter((entry) => entry !== previous && entry?.package !== previous)
+if (!config.plugins.some((entry) => entry === plugin || entry?.package === plugin)) config.plugins.push(plugin)
+fs.writeFileSync(path, JSON.stringify(config, null, 2) + "\n")
+NODE
+
+printf 'Installed OpenCode CLI plugin: %s -> %s\n' "$target_path" "$plugin_root/opencode"
+printf 'Added the plugin to: %s\n' "$cli_config"
+printf 'Restart running OpenCode TUIs to load it.\n'

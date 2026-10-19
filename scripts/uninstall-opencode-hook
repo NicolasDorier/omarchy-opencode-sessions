@@ -3,14 +3,41 @@ set -euo pipefail
 
 plugin_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 source_path="$plugin_root/opencode/omarchy-session-status.ts"
-target_path="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/plugins/omarchy-session-status.ts"
+config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/opencode"
+target_path="$config_dir/cli-plugins/omarchy-session-status"
+previous_target="$config_dir/cli-plugins/omarchy-session-status.ts"
+legacy_path="$config_dir/plugins/omarchy-session-status.ts"
+cli_config="$config_dir/cli.json"
 state_dir="${XDG_RUNTIME_DIR:-/tmp}/omarchy-opencode-sessions"
 
-if [[ -L "$target_path" && "$(readlink -f "$target_path")" == "$source_path" ]]; then
+if [[ -L "$target_path" && "$(readlink -f "$target_path")" == "$plugin_root/opencode" ]]; then
   rm "$target_path"
-  printf 'Removed OpenCode hook: %s\n' "$target_path"
+  printf 'Removed OpenCode CLI plugin: %s\n' "$target_path"
 else
-  printf 'OpenCode hook is not managed by this plugin; leaving it untouched: %s\n' "$target_path"
+  printf 'OpenCode CLI plugin is not managed by this plugin; leaving it untouched: %s\n' "$target_path"
+fi
+
+if [[ -L "$previous_target" && "$(readlink -f "$previous_target")" == "$source_path" ]]; then
+  rm "$previous_target"
+fi
+
+if [[ -L "$legacy_path" && "$(readlink -f "$legacy_path")" == "$source_path" ]]; then
+  rm "$legacy_path"
+fi
+
+if [[ -f "$cli_config" ]]; then
+  CLI_CONFIG="$cli_config" PLUGIN_PATH="$target_path" PREVIOUS_PATH="$previous_target" node <<'NODE'
+const fs = require("node:fs")
+const path = process.env.CLI_CONFIG
+const plugin = process.env.PLUGIN_PATH
+const previous = process.env.PREVIOUS_PATH
+const config = JSON.parse(fs.readFileSync(path, "utf8"))
+if (Array.isArray(config.plugins)) {
+  config.plugins = config.plugins.filter((entry) => entry !== plugin && entry?.package !== plugin && entry !== previous && entry?.package !== previous)
+  if (config.plugins.length === 0) delete config.plugins
+  fs.writeFileSync(path, JSON.stringify(config, null, 2) + "\n")
+}
+NODE
 fi
 
 rm -rf "$state_dir"
